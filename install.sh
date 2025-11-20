@@ -128,19 +128,46 @@ if [ "$BACKEND_NEEDS_BUILD" = "true" ]; then
         export PATH="/home/$BUILD_USER/.cargo/bin:$PATH"
     fi
     
+    # Verify cargo is available
+    if ! command -v cargo &> /dev/null; then
+        echo "ERROR: cargo not found. Please ensure Rust is installed correctly."
+        exit 1
+    fi
+    
+    # Test network connectivity to crates.io
+    echo "Checking network connectivity..."
+    if ! curl -sf --max-time 5 https://crates.io >/dev/null 2>&1; then
+        echo "WARNING: Cannot reach crates.io. Check your network connection."
+        echo "Attempting build anyway..."
+    fi
+    
     # Build as current user (root or regular user)
+    echo "Fetching dependencies and building..."
     if [ "$IS_ROOT" = "true" ] && [ "$BUILD_USER" != "root" ] && id -u "$BUILD_USER" >/dev/null 2>&1; then
         # Running as root, but try to build as non-root user if they exist
         if [ -f "/home/$BUILD_USER/.cargo/env" ]; then
-            sudo -u $BUILD_USER bash -c "cd '$ROOT_DIR/backend' && source /home/$BUILD_USER/.cargo/env && cargo build --release" 2>&1 | tail -2
+            sudo -u $BUILD_USER bash -c "cd '$ROOT_DIR/backend' && source /home/$BUILD_USER/.cargo/env && cargo build --release" || {
+                echo "Build failed. Showing full error:"
+                sudo -u $BUILD_USER bash -c "cd '$ROOT_DIR/backend' && source /home/$BUILD_USER/.cargo/env && cargo build --release 2>&1"
+                exit 1
+            }
         else
             # Build as root if build user doesn't have cargo
-            cargo build --release 2>&1 | tail -2
+            cargo build --release || {
+                echo "Build failed. Showing full error:"
+                cargo build --release 2>&1
+                exit 1
+            }
         fi
     else
         # Build as current user (root or regular)
-        cargo build --release 2>&1 | tail -2
+        cargo build --release || {
+            echo "Build failed. Showing full error:"
+            cargo build --release 2>&1
+            exit 1
+        }
     fi
+    echo "✓ Backend built successfully"
 else
     echo "✓ Backend is up to date, skipping rebuild"
 fi
