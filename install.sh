@@ -54,6 +54,21 @@ else
     fi
 fi
 
+# JWT secret management (after sudo detection)
+JWT_SECRET_VALUE="${JWT_SECRET:-}"
+if [ -z "$JWT_SECRET_VALUE" ]; then
+    if [ -f "/etc/default/$SERVICE_NAME" ]; then
+        EXISTING_JWT_SECRET=$($SUDO_CMD grep '^JWT_SECRET=' /etc/default/$SERVICE_NAME 2>/dev/null | tail -n 1 | cut -d'=' -f2-)
+    else
+        EXISTING_JWT_SECRET=""
+    fi
+    if [ -n "$EXISTING_JWT_SECRET" ]; then
+        JWT_SECRET_VALUE="$EXISTING_JWT_SECRET"
+    else
+        JWT_SECRET_VALUE=$(openssl rand -hex 32)
+    fi
+fi
+
 # Build user
 if [ "$IS_ROOT" = "true" ]; then
     # If running as root, try to find the actual owner of the directory
@@ -273,6 +288,7 @@ MICROSOFT_CLIENT_VALUE=${MICROSOFT_CLIENT_VALUE:-}
 MICROSOFT_TENANT_ID=${MICROSOFT_TENANT_ID:-}
 MICROSOFT_REDIRECT_URI=${MICROSOFT_REDIRECT_URI:-https://w9.nu/api/auth/callback}
 MICROSOFT_SCOPE=${MICROSOFT_SCOPE:-https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send}
+JWT_SECRET=$JWT_SECRET_VALUE
 EOF
 
 # Systemd unit

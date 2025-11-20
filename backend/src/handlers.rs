@@ -6,10 +6,17 @@ use axum::{
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::{AppState, CreateAccountRequest, EmailAccount, InboxQuery, SendEmailRequest, UpdateAccountRequest};
+use crate::{
+    auth::{AuthUser, UserRole},
+    AppState, CreateAccountRequest, EmailAccount, InboxQuery, SendEmailRequest, UpdateAccountRequest,
+};
 use crate::email::EmailService;
 
-pub async fn get_accounts(State(state): State<AppState>) -> Result<Json<Vec<EmailAccount>>, StatusCode> {
+pub async fn get_accounts(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<Vec<EmailAccount>>, StatusCode> {
+    user.ensure_password_updated()?;
     let rows = sqlx::query("SELECT id, email, display_name, is_active FROM accounts")
         .fetch_all(&state.db)
         .await
@@ -30,8 +37,14 @@ pub async fn get_accounts(State(state): State<AppState>) -> Result<Json<Vec<Emai
 
 pub async fn create_account(
     State(state): State<AppState>,
+    user: AuthUser,
     Json(req): Json<CreateAccountRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    user.ensure_password_updated()?;
+    if !matches!(user.role, UserRole::Admin) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     // Check if email already exists
     let existing = sqlx::query("SELECT email FROM accounts WHERE email = ?")
         .bind(&req.email)
@@ -84,8 +97,14 @@ pub async fn create_account(
 pub async fn update_account(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    user: AuthUser,
     Json(req): Json<UpdateAccountRequest>,
 ) -> Result<Json<EmailAccount>, StatusCode> {
+    user.ensure_password_updated()?;
+    if !matches!(user.role, UserRole::Admin) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     // Return error if neither field was provided
     if req.is_active.is_none() && req.password.is_none() {
         return Err(StatusCode::BAD_REQUEST);
@@ -137,10 +156,39 @@ pub async fn update_account(
     Ok(Json(account))
 }
 
+pub async fn delete_account(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    user: AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    user.ensure_password_updated()?;
+    if !matches!(user.role, UserRole::Admin) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let result = sqlx::query("DELETE FROM accounts WHERE id = ?")
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn send_email(
     State(state): State<AppState>,
+    user: AuthUser,
     Json(req): Json<SendEmailRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    user.ensure_password_updated()?;
+    if !matches!(user.role, UserRole::User | UserRole::Dev) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     // Look up the sender account in the database
     let row = sqlx::query("SELECT email, password FROM accounts WHERE email = ? AND is_active = 1")
         .bind(&req.from)
@@ -190,8 +238,10 @@ pub async fn send_email(
 
 pub async fn get_inbox(
     State(_state): State<AppState>,
+    user: AuthUser,
     Query(_params): Query<InboxQuery>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
+    user.ensure_password_updated()?;
     // TODO: Implement IMAP inbox retrieval
     Ok(Json(serde_json::json!([])))
 }

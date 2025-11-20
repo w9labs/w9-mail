@@ -157,6 +157,18 @@ button[disabled] {
   cursor: not-allowed;
 }
 
+.button.ghost {
+  background: transparent;
+}
+
+.button.subtle {
+  border-style: dashed;
+}
+
+.box.warning {
+  border-style: dashed;
+}
+
 .table-wrapper {
   border: 2px solid var(--border);
   overflow-x: auto;

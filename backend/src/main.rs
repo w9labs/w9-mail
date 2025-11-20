@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -8,8 +8,13 @@ use tower_http::cors::CorsLayer;
 
 mod email;
 mod handlers;
+mod auth;
 
 use handlers::*;
+use auth::{
+    change_password, create_user, delete_user, ensure_default_admin, list_users, login, me,
+    update_user,
+};
 
 #[derive(Clone)]
 pub struct MicrosoftOAuthConfig {
@@ -25,6 +30,7 @@ pub struct MicrosoftOAuthConfig {
 pub struct AppState {
     pub db: SqlitePool,
     pub microsoft_oauth: MicrosoftOAuthConfig,
+    pub jwt_secret: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -100,6 +106,23 @@ async fn main() -> anyhow::Result<()> {
     .execute(&db)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin','dev','user')),
+            must_change_password BOOLEAN NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&db)
+    .await?;
+
+    ensure_default_admin(&db).await?;
+
     // Load Microsoft OAuth2 configuration
     let microsoft_oauth = MicrosoftOAuthConfig {
         client_id: std::env::var("MICROSOFT_CLIENT_ID")
@@ -116,15 +139,30 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|_| "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send".to_string()),
     };
 
-    let state = AppState { 
+    let jwt_secret =
+        std::env::var("JWT_SECRET").unwrap_or_else(|_| "change-me-in-production".to_string());
+
+    let state = AppState {
         db,
         microsoft_oauth,
+        jwt_secret,
     };
 
     let app = Router::new()
         .route("/health", get(health_check))
+        .route("/api/auth/login", post(login))
+        .route("/api/auth/change-password", post(change_password))
+        .route("/api/auth/me", get(me))
+        .route("/api/users", get(list_users).post(create_user))
+        .route(
+            "/api/users/:id",
+            patch(update_user).delete(delete_user),
+        )
         .route("/api/accounts", get(get_accounts).post(create_account))
-        .route("/api/accounts/:id", patch(update_account))
+        .route(
+            "/api/accounts/:id",
+            patch(update_account).delete(delete_account),
+        )
         .route("/api/send", post(send_email))
         .route("/api/inbox", get(get_inbox))
         .layer(CorsLayer::permissive())
