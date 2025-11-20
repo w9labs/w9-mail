@@ -144,6 +144,12 @@ ensure_node() {
 }
 
 ensure_node
+if command -v node >/dev/null 2>&1; then
+    echo "✓ Node.js $(node -v) ready"
+else
+    echo "WARNING: Node.js still missing after setup. Aborting."
+    exit 1
+fi
 
 # Install Rust if needed
 if ! command -v rustc &> /dev/null; then
