@@ -92,17 +92,29 @@ fi
 
 # Install packages (only if needed)
 echo "Checking packages..."
-REQUIRED_PKGS="build-essential pkg-config libsqlite3-dev sqlite3 curl gnupg ca-certificates nginx ufw openssl libssl-dev"
-MISSING_PKGS=""
-for pkg in $REQUIRED_PKGS; do
-    if ! dpkg -l | grep -q "^ii  $pkg"; then
-        MISSING_PKGS="$MISSING_PKGS $pkg"
+REQUIRED_PKGS=(
+    build-essential
+    pkg-config
+    libsqlite3-dev
+    sqlite3
+    curl
+    gnupg
+    ca-certificates
+    nginx
+    ufw
+    openssl
+    libssl-dev
+)
+MISSING_PKGS=()
+for pkg in "${REQUIRED_PKGS[@]}"; do
+    if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+        MISSING_PKGS+=("$pkg")
     fi
 done
-if [ -n "$MISSING_PKGS" ]; then
-    echo "Installing missing packages:$MISSING_PKGS"
+if [ ${#MISSING_PKGS[@]} -ne 0 ]; then
+    echo "Installing missing packages: ${MISSING_PKGS[*]}"
     $SUDO_CMD apt-get update -qq >/dev/null 2>&1 || true
-    $SUDO_CMD apt-get install -y $MISSING_PKGS >/dev/null 2>&1 || true
+    $SUDO_CMD apt-get install -y "${MISSING_PKGS[@]}" >/dev/null 2>&1 || true
 fi
 echo "✓ Packages ready"
 
