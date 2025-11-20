@@ -275,9 +275,10 @@ if [ "$FRONTEND_NEEDS_BUILD" = "true" ]; then
         echo "ERROR: Frontend build failed"
         exit 1
     fi
-    echo "Running npm run export..."
-    if ! npm run export; then
-        echo "ERROR: Frontend export failed"
+    # With next.config.js `output: 'export'`, `next build` already writes to `out/`
+    if [ ! -d "out" ]; then
+        echo "ERROR: Static export folder 'out/' not found after build."
+        echo "Ensure next.config.js has output: 'export' or update build steps."
         exit 1
     fi
 else
