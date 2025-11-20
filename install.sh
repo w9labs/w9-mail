@@ -92,7 +92,7 @@ fi
 
 # Install packages (only if needed)
 echo "Checking packages..."
-REQUIRED_PKGS="build-essential pkg-config libsqlite3-dev sqlite3 curl gnupg nginx ufw openssl libssl-dev"
+REQUIRED_PKGS="build-essential pkg-config libsqlite3-dev sqlite3 curl gnupg ca-certificates nginx ufw openssl libssl-dev"
 MISSING_PKGS=""
 for pkg in $REQUIRED_PKGS; do
     if ! dpkg -l | grep -q "^ii  $pkg"; then
