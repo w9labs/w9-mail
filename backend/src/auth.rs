@@ -1,7 +1,7 @@
 use std::fmt;
 
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{Error as PasswordHashError, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
 use axum::{
@@ -11,6 +11,7 @@ use axum::{
     response::Json,
 };
 use chrono::{Duration, Utc};
+use rand_core::OsRng;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
@@ -137,12 +138,13 @@ where
         let auth_header = parts
             .headers
             .get(axum::http::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.to_str().map(|s| s.to_owned()).ok())
             .ok_or((StatusCode::UNAUTHORIZED, "Missing authorization header"))?;
 
         let token = auth_header
             .strip_prefix("Bearer ")
-            .ok_or((StatusCode::UNAUTHORIZED, "Invalid authorization header"))?;
+            .ok_or((StatusCode::UNAUTHORIZED, "Invalid authorization header"))?
+            .to_string();
 
         let State(app_state) =
             State::<AppState>::from_request_parts(parts, state).await.map_err(|_| {
@@ -153,7 +155,7 @@ where
             })?;
 
         let decoding_key = DecodingKey::from_secret(app_state.jwt_secret.as_bytes());
-        let token_data = decode::<Claims>(token, &decoding_key, &Validation::default())
+        let token_data = decode::<Claims>(&token, &decoding_key, &Validation::default())
             .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token"))?;
 
         let row = sqlx::query(
@@ -206,14 +208,14 @@ pub async fn ensure_default_admin(db: &SqlitePool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn hash_password(password: &str) -> Result<String, password_hash::Error> {
+pub fn hash_password(password: &str) -> Result<String, PasswordHashError> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     let hash = argon2.hash_password(password.as_bytes(), &salt)?;
     Ok(hash.to_string())
 }
 
-fn verify_password(password_hash: &str, password: &str) -> Result<bool, password_hash::Error> {
+fn verify_password(password_hash: &str, password: &str) -> Result<bool, PasswordHashError> {
     let parsed_hash = PasswordHash::new(password_hash)?;
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)

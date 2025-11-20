@@ -18,7 +18,8 @@ sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "sqlite"] }
 anyhow = "1.0"
 uuid = { version = "1.6", features = ["v4"] }
 dotenv = "0.15"
-argon2 = "0.5"
+argon2 = { version = "0.5", features = ["password-hash"] }
 jsonwebtoken = "9"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
 
