@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '../../lib/session'
 import Nav from '../components/Nav'
+import Link from 'next/link'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -26,7 +27,7 @@ export default function LoginPage() {
       return
     }
     router.push(session.role === 'admin' ? '/manage' : '/')
-  }, [session, router])
+  }, [session, router, form.password])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
