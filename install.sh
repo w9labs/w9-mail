@@ -278,19 +278,14 @@ server {
 
 # HTTPS server (Cloudflare terminates SSL, nginx receives HTTP from Cloudflare)
 server {
-    listen 443 ssl http2 default_server;
-    listen [::]:443 ssl http2 default_server;
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    http2 on;
     server_name _;
 
-    # SSL certificates (Cloudflare origin cert or self-signed for Cloudflare)
-    ssl_certificate /etc/ssl/certs/cloudflare-origin.pem;
-    ssl_certificate_key /etc/ssl/private/cloudflare-origin.key;
-    
-    # Fallback to self-signed if Cloudflare cert doesn't exist
-    if (!-f /etc/ssl/certs/cloudflare-origin.pem) {
-        ssl_certificate /etc/nginx/ssl/w9.nu/cert.pem;
-        ssl_certificate_key /etc/nginx/ssl/w9.nu/key.pem;
-    }
+    # SSL certificates (use Cloudflare origin cert if available, otherwise self-signed)
+    ssl_certificate SSL_CERT_PLACEHOLDER;
+    ssl_certificate_key SSL_KEY_PLACEHOLDER;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -339,18 +334,33 @@ NGINX_EOF
 sed -i "s|FRONTEND_PUBLIC_PLACEHOLDER|$FRONTEND_PUBLIC|g" /tmp/nginx_$SERVICE_NAME.conf
 sed -i "s|APP_PORT_PLACEHOLDER|$APP_PORT|g" /tmp/nginx_$SERVICE_NAME.conf
 
-# Generate self-signed cert for fallback (Cloudflare will use its own)
+# Determine SSL certificate paths
 SSL_DIR="/etc/nginx/ssl/$DOMAIN"
 $SUDO_CMD mkdir -p $SSL_DIR
-if [ ! -f "$SSL_DIR/cert.pem" ]; then
-    $SUDO_CMD openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout "$SSL_DIR/key.pem" \
-        -out "$SSL_DIR/cert.pem" \
-        -subj "/CN=$DOMAIN" 2>/dev/null
-    $SUDO_CMD chmod 600 "$SSL_DIR/key.pem"
-    $SUDO_CMD chmod 644 "$SSL_DIR/cert.pem"
-    echo "✓ Self-signed certificate created (fallback)"
+
+# Check if Cloudflare origin cert exists, otherwise use self-signed
+if [ -f "/etc/ssl/certs/cloudflare-origin.pem" ] && [ -f "/etc/ssl/private/cloudflare-origin.key" ]; then
+    SSL_CERT="/etc/ssl/certs/cloudflare-origin.pem"
+    SSL_KEY="/etc/ssl/private/cloudflare-origin.key"
+    echo "✓ Using Cloudflare origin certificate"
+else
+    # Generate self-signed cert for fallback
+    if [ ! -f "$SSL_DIR/cert.pem" ]; then
+        $SUDO_CMD openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$SSL_DIR/key.pem" \
+            -out "$SSL_DIR/cert.pem" \
+            -subj "/CN=$DOMAIN" 2>/dev/null
+        $SUDO_CMD chmod 600 "$SSL_DIR/key.pem"
+        $SUDO_CMD chmod 644 "$SSL_DIR/cert.pem"
+        echo "✓ Self-signed certificate created (fallback)"
+    fi
+    SSL_CERT="$SSL_DIR/cert.pem"
+    SSL_KEY="$SSL_DIR/key.pem"
 fi
+
+# Replace SSL placeholders in nginx config
+sed -i "s|SSL_CERT_PLACEHOLDER|$SSL_CERT|g" /tmp/nginx_$SERVICE_NAME.conf
+sed -i "s|SSL_KEY_PLACEHOLDER|$SSL_KEY|g" /tmp/nginx_$SERVICE_NAME.conf
 
 # Install nginx config
 $SUDO_CMD cp /tmp/nginx_$SERVICE_NAME.conf /etc/nginx/sites-available/$SERVICE_NAME

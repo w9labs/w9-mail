@@ -87,7 +87,7 @@ pub async fn update_account(
 
 pub async fn send_email(
     State(_state): State<AppState>,
-    Json(req): Json<SendEmailRequest>,
+    Json(_req): Json<SendEmailRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // TODO: Implement email sending using lettre
     Ok(Json(serde_json::json!({
@@ -98,7 +98,7 @@ pub async fn send_email(
 
 pub async fn get_inbox(
     State(_state): State<AppState>,
-    Query(params): Query<InboxQuery>,
+    Query(_params): Query<InboxQuery>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // TODO: Implement IMAP inbox retrieval
     Ok(Json(serde_json::json!([])))
