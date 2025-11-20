@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 
 interface EmailAccount {
   id: string
@@ -120,117 +121,139 @@ export default function ManagePage() {
     }
   }
 
-  if (loading) return <div>Loading...</div>
+  if (loading) {
+    return (
+      <main className="app">
+        <div className="box">Loading…</div>
+      </main>
+    )
+  }
 
   return (
-    <main style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-      <h1>Manage Email Services</h1>
-      
-      {message && (
-        <div style={{
-          padding: '1rem',
-          marginTop: '1rem',
-          borderRadius: '4px',
-          backgroundColor: message.type === 'success' ? '#d4edda' : '#f8d7da',
-          color: message.type === 'success' ? '#155724' : '#721c24',
-          border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`
-        }}>
-          {message.text}
-        </div>
-      )}
-      
-      <section style={{ marginTop: '2rem' }}>
-        <h2>Add New Email Account</h2>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '500px' }}>
-          <input
-            type="email"
-            placeholder="Email address"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            required
-          />
-          <input
-            type="text"
-            placeholder="Display name"
-            value={formData.displayName}
-            onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={formData.password}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            required
-          />
+    <main className="app">
+      <header className="header">
+        <h1>W9 Mail / Accounts</h1>
+        <p>Register Microsoft senders, flip activation, rotate secrets.</p>
+      </header>
+
+      <nav className="nav">
+        <Link className="nav-link" href="/">Composer</Link>
+        <Link className="nav-link active" href="/manage">Manage</Link>
+        <Link className="nav-link" href="/docs">Docs</Link>
+      </nav>
+
+      {message && <div className={`status ${message.type}`}>{message.text}</div>}
+
+      <section className="box">
+        <h2 className="section-title">Add Email Account</h2>
+        <form className="form" onSubmit={handleSubmit}>
+          <div className="row">
+            <label>Email</label>
+            <input
+              type="email"
+              placeholder="sender@domain.com"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+          </div>
+          <div className="row">
+            <label>Display name</label>
+            <input
+              type="text"
+              placeholder="Operations Bot"
+              value={formData.displayName}
+              onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+              required
+            />
+          </div>
+          <div className="row">
+            <label>Password / App password</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              required
+            />
+          </div>
           <label>
             <input
               type="checkbox"
               checked={formData.isActive}
               onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-            />
-            Active
+            />{' '}
+            active
           </label>
-          <button type="submit">Add Account</button>
+          <button className="button" type="submit">
+            Add account
+          </button>
         </form>
       </section>
 
-      <section style={{ marginTop: '3rem' }}>
-        <h2>Email Accounts</h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ddd' }}>Email</th>
-              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ddd' }}>Display Name</th>
-              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ddd' }}>Status</th>
-              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ddd' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map((account) => (
-              <tr key={account.id}>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #ddd' }}>{account.email}</td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #ddd' }}>{account.displayName}</td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #ddd' }}>
-                  {account.isActive ? 'Active' : 'Inactive'}
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #ddd' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <button onClick={() => toggleActive(account.id, account.isActive)}>
-                      {account.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                    {editingPassword === account.id ? (
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <input
-                          type="password"
-                          placeholder="New password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          style={{ padding: '0.25rem', fontSize: '0.9rem' }}
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                              handlePasswordChange(account.id)
-                            }
-                          }}
-                        />
-                        <button onClick={() => handlePasswordChange(account.id)}>Save</button>
-                        <button onClick={() => {
-                          setEditingPassword(null)
-                          setNewPassword('')
-                        }}>Cancel</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => {
-                        setEditingPassword(account.id)
-                        setNewPassword('')
-                      }}>Change Password</button>
-                    )}
-                  </div>
-                </td>
+      <section className="box">
+        <h2 className="section-title">Account registry</h2>
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Display</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {accounts.map((account) => (
+                <tr key={account.id}>
+                  <td>{account.email}</td>
+                  <td>{account.displayName}</td>
+                  <td>{account.isActive ? 'Active' : 'Inactive'}</td>
+                  <td>
+                    <div className="actions">
+                      <button onClick={() => toggleActive(account.id, account.isActive)}>
+                        {account.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                      {editingPassword === account.id ? (
+                        <div className="password-inline">
+                          <input
+                            type="password"
+                            placeholder="New password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                handlePasswordChange(account.id)
+                              }
+                            }}
+                          />
+                          <button onClick={() => handlePasswordChange(account.id)}>Save</button>
+                          <button
+                            onClick={() => {
+                              setEditingPassword(null)
+                              setNewPassword('')
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingPassword(account.id)
+                            setNewPassword('')
+                          }}
+                        >
+                          Change password
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
   )
