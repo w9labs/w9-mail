@@ -1,7 +1,8 @@
 use std::fmt;
 
+use anyhow::anyhow;
 use argon2::{
-    password_hash::{Error as PasswordHashError, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
 use axum::{
@@ -208,15 +209,17 @@ pub async fn ensure_default_admin(db: &SqlitePool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn hash_password(password: &str) -> Result<String, PasswordHashError> {
+pub fn hash_password(password: &str) -> Result<String, anyhow::Error> {
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
-    let hash = argon2.hash_password(password.as_bytes(), &salt)?;
+    let hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|e| anyhow!(e.to_string()))?;
     Ok(hash.to_string())
 }
 
-fn verify_password(password_hash: &str, password: &str) -> Result<bool, PasswordHashError> {
-    let parsed_hash = PasswordHash::new(password_hash)?;
+fn verify_password(password_hash: &str, password: &str) -> Result<bool, anyhow::Error> {
+    let parsed_hash = PasswordHash::new(password_hash).map_err(|e| anyhow!(e.to_string()))?;
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok())
