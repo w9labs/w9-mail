@@ -223,8 +223,19 @@ $SUDO_CMD mkdir -p $INSTALL_DIR $DATA_DIR
 $SUDO_CMD cp "$ROOT_DIR/backend/target/release/w9-mail-backend" "$INSTALL_DIR/w9-mail-backend"
 $SUDO_CMD chown root:$SERVICE_USER "$INSTALL_DIR/w9-mail-backend"
 $SUDO_CMD chmod 750 "$INSTALL_DIR/w9-mail-backend"
+
+# Ensure INSTALL_DIR is accessible by service user (needed to access DATA_DIR)
+$SUDO_CMD chmod 755 $INSTALL_DIR
+
+# Ensure DATA_DIR exists and has correct permissions for service user to write database
 $SUDO_CMD chown -R $SERVICE_USER:$SERVICE_USER $DATA_DIR
-$SUDO_CMD chmod -R 755 $DATA_DIR
+$SUDO_CMD chmod 755 $DATA_DIR
+# Create database file if it doesn't exist and set permissions (SQLite will initialize it)
+if [ ! -f "$DATA_DIR/w9mail.db" ]; then
+    $SUDO_CMD touch "$DATA_DIR/w9mail.db"
+    $SUDO_CMD chown $SERVICE_USER:$SERVICE_USER "$DATA_DIR/w9mail.db"
+    $SUDO_CMD chmod 664 "$DATA_DIR/w9mail.db"
+fi
 
 # Install frontend
 echo "Installing frontend..."
