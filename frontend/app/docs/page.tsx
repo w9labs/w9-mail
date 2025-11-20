@@ -24,6 +24,9 @@ export default function DocsPage() {
         <Link className="nav-link active" href="/docs">
           Docs
         </Link>
+        <Link className="nav-link" href="/profile">
+          Profile
+        </Link>
       </nav>
 
       {!canView ? (
@@ -72,6 +75,68 @@ BODY:
 {
   "currentPassword": "string",
   "newPassword": "string"
+}`}</pre>
+            </article>
+
+            <article>
+              <h3>POST /api/auth/signup</h3>
+              <p>Register a normal user and trigger the verification email.</p>
+              <pre>{`REQUEST:
+{
+  "email": "user@domain.com",
+  "password": "string (>=8 chars)"
+}
+
+RESPONSE:
+{
+  "status": "pending",
+  "message": "Check your inbox for a verification link."
+}`}</pre>
+            </article>
+
+            <article>
+              <h3>POST /api/auth/signup/verify</h3>
+              <p>Confirm the token emailed during signup.</p>
+              <pre>{`REQUEST:
+{
+  "token": "uuid-from-email"
+}
+
+RESPONSE:
+{
+  "status": "verified",
+  "message": "Account verified. You can sign in now."
+}`}</pre>
+            </article>
+
+            <article>
+              <h3>POST /api/auth/password-reset</h3>
+              <p>Send a reset link via the default sender. Hides whether the email exists.</p>
+              <pre>{`REQUEST:
+{
+  "email": "user@domain.com"
+}
+
+RESPONSE:
+{
+  "status": "ok",
+  "message": "If the email exists, a reset link was sent."
+}`}</pre>
+            </article>
+
+            <article>
+              <h3>POST /api/auth/password-reset/confirm</h3>
+              <p>Consume the reset token and set a new password.</p>
+              <pre>{`REQUEST:
+{
+  "token": "uuid",
+  "newPassword": "string"
+}
+
+RESPONSE:
+{
+  "status": "success",
+  "message": "Password updated. You can sign in now."
 }`}</pre>
             </article>
 
@@ -164,6 +229,30 @@ REQUEST:
           <article>
             <h3>DELETE /api/users/:id</h3>
             <p>Admin-only removal. Backend blocks deleting the currently authenticated admin.</p>
+          </article>
+
+          <article>
+            <h3>GET /api/settings/default-sender</h3>
+            <p>Admin-only snapshot of the automatic sender used for signup and reset emails.</p>
+            <pre>{`RESPONSE:
+{
+  "senderType": "account|alias",
+  "senderId": "uuid",
+  "email": "alias@domain.com",
+  "displayLabel": "Marketing Bot",
+  "viaDisplay": "Ops Bot (ops@domain.com)",
+  "isActive": true
+}`}</pre>
+          </article>
+
+          <article>
+            <h3>PUT /api/settings/default-sender</h3>
+            <p>Admin-only setter. Only active accounts or aliases are accepted.</p>
+            <pre>{`REQUEST:
+{
+  "senderType": "account|alias",
+  "senderId": "uuid"
+}`}</pre>
           </article>
 
             <article>

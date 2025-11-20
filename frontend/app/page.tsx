@@ -200,9 +200,14 @@ export default function Home() {
             /ShayNeeo/w9-mail
           </a>
           {session ? (
-            <button className="button subtle" onClick={logout}>
-              Sign out ({session.email})
-            </button>
+            <>
+              <Link className="button ghost" href="/profile">
+                Profile
+              </Link>
+              <button className="button subtle" onClick={logout}>
+                Sign out ({session.email})
+              </button>
+            </>
           ) : (
             <Link className="button" href="/login">
               Sign in
@@ -220,6 +225,9 @@ export default function Home() {
         </Link>
         <Link className="nav-link" href="/docs">
           Docs
+        </Link>
+        <Link className="nav-link" href="/profile">
+          Profile
         </Link>
       </nav>
 

@@ -24,6 +24,7 @@ impl EmailService {
         body: &str,
         cc: Option<&str>,
         bcc: Option<&str>,
+        as_html: bool,
     ) -> anyhow::Result<()> {
         // Parse email addresses
         let from_addr: Mailbox = header_from.parse()?;
@@ -80,12 +81,17 @@ impl EmailService {
         }
 
         // Set body as plain text (can be extended to HTML later)
-        let email = message_builder
-            .singlepart(
-                SinglePart::builder()
-                    .header(ContentType::TEXT_PLAIN)
-                    .body(body.to_string()),
-            )?;
+        let content_type = if as_html {
+            ContentType::TEXT_HTML
+        } else {
+            ContentType::TEXT_PLAIN
+        };
+
+        let email = message_builder.singlepart(
+            SinglePart::builder()
+                .header(content_type)
+                .body(body.to_string()),
+        )?;
 
         // Create SMTP transport for Microsoft/Outlook
         // Port 587 requires STARTTLS (not direct TLS)

@@ -8,8 +8,10 @@ use uuid::Uuid;
 
 use crate::{
     auth::{AuthUser, UserRole},
-    AppState, CreateAccountRequest, CreateAliasRequest, EmailAccount, EmailAlias, InboxQuery,
-    SendEmailRequest, UpdateAccountRequest, UpdateAliasRequest,
+    mailer::{self, SenderKind, SenderSummary},
+    AppState, CreateAccountRequest, CreateAliasRequest, DefaultSenderResponse, EmailAccount,
+    EmailAlias, InboxQuery, SendEmailRequest, UpdateAccountRequest, UpdateAliasRequest,
+    UpdateDefaultSenderRequest,
 };
 use crate::email::EmailService;
 
@@ -175,6 +177,10 @@ pub async fn delete_account(
 
     if result.rows_affected() == 0 {
         return Err(StatusCode::NOT_FOUND);
+    }
+
+    if let Err(e) = mailer::delete_default_if_matches(&state.db, SenderKind::Account, &id).await {
+        eprintln!("Failed to clear default sender after account deletion: {}", e);
     }
 
     Ok(StatusCode::NO_CONTENT)
@@ -412,7 +418,60 @@ pub async fn delete_alias(
         return Err(StatusCode::NOT_FOUND);
     }
 
+    if let Err(e) = mailer::delete_default_if_matches(&state.db, SenderKind::Alias, &id).await {
+        eprintln!("Failed to clear default sender after alias deletion: {}", e);
+    }
+
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_default_sender(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<Option<DefaultSenderResponse>>, StatusCode> {
+    user.ensure_password_updated()?;
+    if !matches!(user.role, UserRole::Admin) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    match mailer::get_default_sender_summary(&state.db).await {
+        Ok(Some(summary)) => Ok(Json(Some(sender_summary_to_response(&summary)))),
+        Ok(None) => Ok(Json(None)),
+        Err(e) => {
+            eprintln!("Failed to load default sender: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn update_default_sender(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<UpdateDefaultSenderRequest>,
+) -> Result<Json<DefaultSenderResponse>, StatusCode> {
+    user.ensure_password_updated()?;
+    if !matches!(user.role, UserRole::Admin) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    match mailer::upsert_default_sender(&state.db, req.sender_type, &req.sender_id).await {
+        Ok(summary) => Ok(Json(sender_summary_to_response(&summary))),
+        Err(e) => {
+            eprintln!("Failed to set default sender: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+fn sender_summary_to_response(summary: &SenderSummary) -> DefaultSenderResponse {
+    DefaultSenderResponse {
+        sender_type: summary.sender_type,
+        sender_id: summary.sender_id.clone(),
+        email: summary.email.clone(),
+        display_label: summary.display_label.clone(),
+        via_display: summary.via_display.clone(),
+        is_active: summary.is_active,
+    }
 }
 
 pub async fn send_email(
@@ -439,41 +498,13 @@ pub async fn send_email(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Look up the sender account in the database or via alias
-    let direct_account = sqlx::query(
-        "SELECT email, password FROM accounts WHERE email = ? AND is_active = 1",
-    )
-    .bind(&from_address)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let (auth_email, auth_password) = if let Some(row) = direct_account {
-        (row.get::<String, _>(0), row.get::<String, _>(1))
-    } else {
-        let alias_row = sqlx::query(
-            r#"
-            SELECT accounts.email, accounts.password
-            FROM aliases
-            JOIN accounts ON aliases.account_id = accounts.id
-            WHERE aliases.alias_email = ?
-              AND aliases.is_active = 1
-              AND accounts.is_active = 1
-            "#,
-        )
-        .bind(&from_address)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        match alias_row {
-            Some(row) => (row.get::<String, _>(0), row.get::<String, _>(1)),
-            None => {
-                return Ok(Json(serde_json::json!({
-                    "status": "error",
-                    "message": "Sender account or alias not found or inactive"
-                })));
-            }
+    let resolved = match mailer::resolve_sender_by_email(&state.db, &from_address).await {
+        Ok(sender) => sender,
+        Err(_) => {
+            return Ok(Json(serde_json::json!({
+                "status": "error",
+                "message": "Sender account or alias not found or inactive"
+            })));
         }
     };
 
@@ -481,13 +512,14 @@ pub async fn send_email(
     let email_service = EmailService::new();
     match email_service.send_email(
         &from_address,
-        &auth_email,
-        &auth_password,
+        &resolved.auth_email,
+        &resolved.auth_password,
         &to,
         &subject,
         &body,
         cc.as_deref(),
         bcc.as_deref(),
+        false,
     ).await {
         Ok(_) => {
             Ok(Json(serde_json::json!({

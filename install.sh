@@ -16,6 +16,7 @@ DATA_DIR=$INSTALL_DIR/data
 APP_PORT=${APP_PORT:-8080}
 DOMAIN=${DOMAIN:-w9.nu}
 BASE_URL=${BASE_URL:-https://$DOMAIN}
+APP_WEB_BASE_URL=${APP_WEB_BASE_URL:-$BASE_URL}
 FRONTEND_PUBLIC=/var/www/w9-mail
 
 # Backup for rollback
@@ -289,6 +290,7 @@ MICROSOFT_TENANT_ID=${MICROSOFT_TENANT_ID:-}
 MICROSOFT_REDIRECT_URI=${MICROSOFT_REDIRECT_URI:-https://w9.nu/api/auth/callback}
 MICROSOFT_SCOPE=${MICROSOFT_SCOPE:-https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send}
 JWT_SECRET=$JWT_SECRET_VALUE
+APP_WEB_BASE_URL=$APP_WEB_BASE_URL
 EOF
 
 # Systemd unit

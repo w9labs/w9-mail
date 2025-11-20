@@ -115,8 +115,17 @@ export default function LoginPage() {
         <Link className="nav-link" href="/manage">
           Manage
         </Link>
+        <Link className="nav-link" href="/docs">
+          Docs
+        </Link>
+        <Link className="nav-link" href="/profile">
+          Profile
+        </Link>
         <Link className="nav-link active" href="/login">
           Login
+        </Link>
+        <Link className="nav-link" href="/signup">
+          Signup
         </Link>
       </nav>
 
@@ -148,6 +157,10 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+          <p className="hint">
+            New here? <Link href="/signup">Create an account</Link>. Need a reset? Visit your{' '}
+            <Link href="/profile">profile</Link> to trigger the email flow.
+          </p>
         </section>
       )}
 

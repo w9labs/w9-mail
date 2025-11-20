@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
-use crate::AppState;
+use crate::{email::EmailService, mailer, AppState};
 
 const TOKEN_TTL_HOURS: i64 = 12;
 
@@ -125,6 +125,29 @@ pub struct UpdateUserRequest {
     pub role: Option<UserRole>,
     #[serde(rename = "mustChangePassword")]
     pub must_change_password: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct SignupRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Deserialize)]
+pub struct SignupVerifyRequest {
+    pub token: String,
+}
+
+#[derive(Deserialize)]
+pub struct PasswordResetRequest {
+    pub email: String,
+}
+
+#[derive(Deserialize)]
+pub struct PasswordResetConfirmRequest {
+    pub token: String,
+    #[serde(rename = "newPassword")]
+    pub new_password: String,
 }
 
 #[async_trait]
@@ -274,6 +297,399 @@ pub async fn login(
         role,
         must_change_password: row.get::<bool, _>(4),
     }))
+}
+
+pub async fn signup(
+    State(state): State<AppState>,
+    Json(payload): Json<SignupRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let email = normalize_email(&payload.email);
+    if email.is_empty() || payload.password.len() < 8 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let existing: i64 = sqlx::query_scalar("SELECT COUNT(1) FROM users WHERE email = ?")
+        .bind(&email)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if existing > 0 {
+        return Ok(Json(serde_json::json!({
+            "status": "error",
+            "message": "Email already registered"
+        })));
+    }
+
+    let password_hash =
+        hash_password(&payload.password).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let token = Uuid::new_v4().to_string();
+    let expires_at = (Utc::now() + Duration::minutes(30))
+        .timestamp();
+
+    sqlx::query("DELETE FROM pending_users WHERE email = ?")
+        .bind(&email)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO pending_users (id, email, password_hash, verification_token, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&email)
+    .bind(&password_hash)
+    .bind(&token)
+    .bind(expires_at)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let default_sender = match mailer::get_default_sender_summary(&state.db).await {
+        Ok(Some(summary)) => summary,
+        Ok(None) => {
+            return Ok(Json(serde_json::json!({
+                "status": "error",
+                "message": "Registration is temporarily unavailable. Ask an admin to set a default sender."
+            })));
+        }
+        Err(e) => {
+            eprintln!("Failed to load default sender: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    let base_url = state.app_base_url.trim_end_matches('/').to_string();
+    let verify_url = format!("{}/signup/verify?token={}", base_url, token);
+    let body_lines = vec![
+        format!("Welcome! Confirm that {} should send through W9 Mail.", email),
+        "This link expires in 30 minutes.".to_string(),
+    ];
+    let email_body = build_system_email_html(
+        "Verify your W9 Mail account",
+        &body_lines,
+        "Verify account",
+        &verify_url,
+    );
+
+    let email_service = EmailService::new();
+    if let Err(e) = email_service
+        .send_email(
+            &default_sender.credentials.header_from,
+            &default_sender.credentials.auth_email,
+            &default_sender.credentials.auth_password,
+            &email,
+            "Verify your W9 Mail account",
+            &email_body,
+            None,
+            None,
+            true,
+        )
+        .await
+    {
+        eprintln!("Failed to send verification email: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(Json(serde_json::json!({
+        "status": "pending",
+        "message": "Check your inbox for a verification link."
+    })))
+}
+
+pub async fn verify_signup(
+    State(state): State<AppState>,
+    Json(payload): Json<SignupVerifyRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let row = sqlx::query(
+        "SELECT id, email, password_hash, expires_at FROM pending_users WHERE verification_token = ?",
+    )
+    .bind(&payload.token)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some(row) = row else {
+        return Ok(Json(serde_json::json!({
+            "status": "error",
+            "message": "Invalid or expired verification link."
+        })));
+    };
+
+    let expires_at = row.get::<i64, _>(3);
+    if expires_at < Utc::now().timestamp() {
+        sqlx::query("DELETE FROM pending_users WHERE id = ?")
+            .bind(row.get::<String, _>(0))
+            .execute(&state.db)
+            .await
+            .ok();
+        return Ok(Json(serde_json::json!({
+            "status": "error",
+            "message": "Verification link expired. Please register again."
+        })));
+    }
+
+    let email = row.get::<String, _>(1);
+    let password_hash = row.get::<String, _>(2);
+    let user_id = Uuid::new_v4().to_string();
+
+    let insert_result = sqlx::query(
+        r#"
+        INSERT INTO users (id, email, password_hash, role, must_change_password)
+        VALUES (?, ?, ?, 'user', 0)
+        "#,
+    )
+    .bind(&user_id)
+    .bind(&email)
+    .bind(&password_hash)
+    .execute(&state.db)
+    .await;
+
+    if let Err(e) = insert_result {
+        eprintln!("Failed to finalize signup: {}", e);
+        return Ok(Json(serde_json::json!({
+            "status": "error",
+            "message": "This email is already activated. Try signing in."
+        })));
+    }
+
+    sqlx::query("DELETE FROM pending_users WHERE id = ?")
+        .bind(row.get::<String, _>(0))
+        .execute(&state.db)
+        .await
+        .ok();
+
+    Ok(Json(serde_json::json!({
+        "status": "verified",
+        "message": "Account verified. You can sign in now."
+    })))
+}
+
+pub async fn request_password_reset(
+    State(state): State<AppState>,
+    Json(payload): Json<PasswordResetRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let email = normalize_email(&payload.email);
+    if email.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let row = sqlx::query("SELECT id FROM users WHERE email = ?")
+        .bind(&email)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some(row) = row else {
+        // Always hide whether the user exists
+        return Ok(Json(serde_json::json!({
+            "status": "ok",
+            "message": "If the email exists, a reset link was sent."
+        })));
+    };
+
+    let user_id = row.get::<String, _>(0);
+    let token = Uuid::new_v4().to_string();
+    let expires_at = (Utc::now() + Duration::minutes(30)).timestamp();
+
+    sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = ?")
+        .bind(&user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO password_reset_tokens (id, user_id, token, expires_at)
+        VALUES (?, ?, ?, ?)
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&user_id)
+    .bind(&token)
+    .bind(expires_at)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let default_sender = match mailer::get_default_sender_summary(&state.db).await {
+        Ok(Some(summary)) => summary,
+        _ => {
+            return Ok(Json(serde_json::json!({
+                "status": "error",
+                "message": "Password reset is unavailable. Contact an admin."
+            })));
+        }
+    };
+
+    let base_url = state.app_base_url.trim_end_matches('/').to_string();
+    let reset_url = format!("{}/reset-password?token={}", base_url, token);
+    let body_lines = vec![
+        format!("We received a reset request for {}.", email),
+        "If you didn't request it, you can ignore this email.".to_string(),
+    ];
+    let email_body =
+        build_system_email_html("Reset your W9 Mail password", &body_lines, "Reset password", &reset_url);
+
+    let email_service = EmailService::new();
+    if let Err(e) = email_service
+        .send_email(
+            &default_sender.credentials.header_from,
+            &default_sender.credentials.auth_email,
+            &default_sender.credentials.auth_password,
+            &email,
+            "Reset your W9 Mail password",
+            &email_body,
+            None,
+            None,
+            true,
+        )
+        .await
+    {
+        eprintln!("Failed to send reset email: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "message": "If the email exists, a reset link was sent."
+    })))
+}
+
+pub async fn confirm_password_reset(
+    State(state): State<AppState>,
+    Json(payload): Json<PasswordResetConfirmRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if payload.new_password.len() < 8 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let row = sqlx::query(
+        "SELECT user_id, expires_at FROM password_reset_tokens WHERE token = ?",
+    )
+    .bind(&payload.token)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some(row) = row else {
+        return Ok(Json(serde_json::json!({
+            "status": "error",
+            "message": "Invalid or expired reset link."
+        })));
+    };
+
+    if row.get::<i64, _>(1) < Utc::now().timestamp() {
+        sqlx::query("DELETE FROM password_reset_tokens WHERE token = ?")
+            .bind(&payload.token)
+            .execute(&state.db)
+            .await
+            .ok();
+        return Ok(Json(serde_json::json!({
+            "status": "error",
+            "message": "Reset link expired. Request a new one."
+        })));
+    }
+
+    let user_id = row.get::<String, _>(0);
+    let new_hash =
+        hash_password(&payload.new_password).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?")
+        .bind(new_hash)
+        .bind(&user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = ?")
+        .bind(&user_id)
+        .execute(&state.db)
+        .await
+        .ok();
+
+    Ok(Json(serde_json::json!({
+        "status": "success",
+        "message": "Password updated. You can sign in now."
+    })))
+}
+
+fn normalize_email(input: &str) -> String {
+    input.trim().to_lowercase()
+}
+
+fn html_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+fn build_system_email_html(
+    title: &str,
+    body_lines: &[String],
+    button_text: &str,
+    button_url: &str,
+) -> String {
+    let paragraphs = body_lines
+        .iter()
+        .map(|line| {
+            format!(
+                "<p style=\"color:#d4d4d4;font-size:15px;line-height:1.6;margin:0 0 16px;\">{}</p>",
+                html_escape(line)
+            )
+        })
+        .collect::<String>();
+
+    format!(
+        r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+</head>
+<body style="background-color:#050505;padding:32px;font-family:'Inter',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:520px;background-color:#111214;border:1px solid #1f1f23;border-radius:18px;padding:32px;">
+          <tr>
+            <td>
+              <p style="color:#4ade80;font-size:13px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 12px;">W9 Mail</p>
+              <h1 style="color:#ffffff;font-size:24px;margin:0 0 16px;">{title}</h1>
+              {paragraphs}
+              <p style="text-align:center;margin:32px 0;">
+                <a href="{button_url}" style="display:inline-block;background:linear-gradient(90deg,#4ade80,#22d3ee);color:#050505;padding:14px 28px;border-radius:999px;font-weight:600;text-decoration:none;">
+                  {button_text}
+                </a>
+              </p>
+              <p style="color:#777;text-align:center;font-size:12px;line-height:1.5;">
+                If the button doesn't work, copy and paste this link:<br />
+                <span style="color:#fff;word-break:break-all;">{button_url}</span>
+              </p>
+              <hr style="border:none;border-top:1px solid #1f1f23;margin:32px 0;" />
+              <p style="color:#555;font-size:12px;line-height:1.5;">
+                Automatic message from the W9 Mail console. Replies are not monitored.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"#,
+        title = html_escape(title),
+        paragraphs = paragraphs,
+        button_text = html_escape(button_text),
+        button_url = html_escape(button_url),
+    )
 }
 
 pub async fn change_password(

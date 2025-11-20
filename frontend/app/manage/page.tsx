@@ -22,6 +22,15 @@ interface EmailAlias {
   accountIsActive: boolean
 }
 
+interface DefaultSender {
+  senderType: 'account' | 'alias'
+  senderId: string
+  email: string
+  displayLabel: string
+  viaDisplay?: string | null
+  isActive: boolean
+}
+
 interface UserSummary {
   id: string
   email: string
@@ -34,6 +43,7 @@ type RoleOption = 'admin' | 'dev' | 'user'
 export default function ManagePage() {
   const { session, logout } = useSession()
   const [accounts, setAccounts] = useState<EmailAccount[]>([])
+  const [defaultSender, setDefaultSender] = useState<DefaultSender | null>(null)
   const [aliases, setAliases] = useState<EmailAlias[]>([])
   const [users, setUsers] = useState<UserSummary[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,6 +62,8 @@ export default function ManagePage() {
     displayName: '',
     isActive: true
   })
+  const [defaultSelection, setDefaultSelection] = useState('')
+  const [savingDefault, setSavingDefault] = useState(false)
   const [loadingAliases, setLoadingAliases] = useState(false)
   const [userForm, setUserForm] = useState<{
     email: string
@@ -71,7 +83,7 @@ export default function ManagePage() {
       return
     }
     const bootstrap = async () => {
-      await Promise.all([fetchAccounts(), fetchAliases(), fetchUsers()])
+      await Promise.all([fetchAccounts(), fetchAliases(), fetchUsers(), fetchDefaultSender()])
       setLoading(false)
     }
     bootstrap()
@@ -117,11 +129,38 @@ export default function ManagePage() {
     }
   }
 
+  const fetchDefaultSender = async () => {
+    if (!session?.token) return
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const response = await fetch(`${apiUrl}/settings/default-sender`, {
+        headers: { Authorization: `Bearer ${session.token}` }
+      })
+      if (response.ok) {
+        const data = await response.json().catch(() => null)
+        setDefaultSender(data)
+        if (data) {
+          setDefaultSelection(`${data.senderType}:${data.senderId}`)
+        }
+      } else if (response.status === 401) {
+        logout()
+      }
+    } catch (error) {
+      console.error('Failed to fetch default sender:', error)
+    }
+  }
+
   useEffect(() => {
     if (!aliasForm.accountId && accounts.length) {
       setAliasForm((prev) => ({ ...prev, accountId: accounts[0].id }))
     }
   }, [accounts, aliasForm.accountId])
+
+  useEffect(() => {
+    if (defaultSender) {
+      setDefaultSelection(`${defaultSender.senderType}:${defaultSender.senderId}`)
+    }
+  }, [defaultSender])
 
   const fetchUsers = async () => {
     if (!session?.token) return
@@ -202,6 +241,7 @@ export default function ManagePage() {
           displayName: ''
         }))
         await fetchAliases()
+        await fetchDefaultSender()
       } else if (response.status === 409) {
         setMessage({ type: 'error', text: 'Alias email already exists' })
       } else {
@@ -211,6 +251,45 @@ export default function ManagePage() {
     } catch (error) {
       console.error('Failed to create alias:', error)
       setMessage({ type: 'error', text: 'Network error. Please try again.' })
+    }
+  }
+
+  const handleDefaultSenderSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!session?.token) return
+    if (!defaultSelection) {
+      setMessage({ type: 'error', text: 'Pick a sender first' })
+      return
+    }
+    const [senderType, senderId] = defaultSelection.split(':')
+    if (!senderType || !senderId) {
+      setMessage({ type: 'error', text: 'Invalid selection' })
+      return
+    }
+    setSavingDefault(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const response = await fetch(`${apiUrl}/settings/default-sender`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`
+        },
+        body: JSON.stringify({ senderType, senderId })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setDefaultSender(data)
+        setMessage({ type: 'success', text: 'Default sender updated' })
+      } else {
+        const error = await response.json().catch(() => ({ message: 'Failed to set sender' }))
+        setMessage({ type: 'error', text: error.message || 'Failed to set sender' })
+      }
+    } catch (error) {
+      console.error('Failed to set default sender:', error)
+      setMessage({ type: 'error', text: 'Network error. Please try again.' })
+    } finally {
+      setSavingDefault(false)
     }
   }
 
@@ -235,6 +314,7 @@ export default function ManagePage() {
           )
         )
         setMessage({ type: 'success', text: `Account ${!isActive ? 'activated' : 'deactivated'} successfully` })
+        await fetchDefaultSender()
       } else {
         const error = await response.json().catch(() => ({ message: 'Failed to update account' }))
         setMessage({ type: 'error', text: error.message || 'Failed to update account' })
@@ -261,6 +341,7 @@ export default function ManagePage() {
         const data = await response.json()
         setAliases((prev) => prev.map((alias) => (alias.id === id ? data : alias)))
         setMessage({ type: 'success', text: `Alias ${!isActive ? 'activated' : 'deactivated'} successfully` })
+        await fetchDefaultSender()
       } else {
         const error = await response.json().catch(() => ({ message: 'Failed to update alias' }))
         setMessage({ type: 'error', text: error.message || 'Failed to update alias' })
@@ -285,6 +366,7 @@ export default function ManagePage() {
       if (response.ok || response.status === 204) {
         setAliases((prev) => prev.filter((alias) => alias.id !== id))
         setMessage({ type: 'success', text: 'Alias removed' })
+        await fetchDefaultSender()
       } else {
         const error = await response.json().catch(() => ({ message: 'Failed to delete alias' }))
         setMessage({ type: 'error', text: error.message || 'Failed to delete alias' })
@@ -338,6 +420,7 @@ export default function ManagePage() {
         setAccounts((prev) => prev.filter((acc) => acc.id !== id))
         setAliases((prev) => prev.filter((alias) => alias.accountId !== id))
         setMessage({ type: 'success', text: 'Account removed' })
+        await fetchDefaultSender()
       } else {
         const error = await response.json().catch(() => ({ message: 'Failed to delete account' }))
         setMessage({ type: 'error', text: error.message || 'Failed to delete account' })
@@ -430,6 +513,17 @@ export default function ManagePage() {
     }
   }
 
+  const defaultSenderOptions = [
+    ...accounts.map((account) => ({
+      value: `account:${account.id}`,
+      label: `${account.displayName} (${account.email})`
+    })),
+    ...aliases.map((alias) => ({
+      value: `alias:${alias.id}`,
+      label: `${alias.aliasEmail} · via ${alias.accountEmail}`
+    }))
+  ]
+
   const requiresAdmin = session && session.role !== 'admin'
 
   if (loading) {
@@ -491,6 +585,9 @@ export default function ManagePage() {
         <Link className="nav-link" href="/docs">
           Docs
         </Link>
+        <Link className="nav-link" href="/profile">
+          Profile
+        </Link>
       </nav>
 
       {message && <div className={`status ${message.type}`}>{message.text}</div>}
@@ -540,6 +637,42 @@ export default function ManagePage() {
             Add account
           </button>
         </form>
+      </section>
+
+      <section className="box">
+        <h2 className="section-title">System sender (verification + reset)</h2>
+        <p>Automatic emails are dispatched through this sender. Pick an active credential or alias.</p>
+        <form className="form" onSubmit={handleDefaultSenderSave}>
+          <div className="row">
+            <label>Sender</label>
+            <select
+              value={defaultSelection}
+              onChange={(e) => setDefaultSelection(e.target.value)}
+              disabled={!defaultSenderOptions.length || savingDefault}
+            >
+              <option value="">Select sender</option>
+              {defaultSenderOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {!defaultSenderOptions.length && (
+              <small>Add an account or alias to enable automatic emails.</small>
+            )}
+          </div>
+          <button className="button" type="submit" disabled={!defaultSenderOptions.length || savingDefault}>
+            {savingDefault ? 'Saving…' : defaultSender ? 'Update default' : 'Set default'}
+          </button>
+        </form>
+        {defaultSender ? (
+          <div className="status success">
+            Default: {defaultSender.displayLabel} ({defaultSender.email})
+            {defaultSender.viaDisplay && <span> · {defaultSender.viaDisplay}</span>}
+          </div>
+        ) : (
+          <div className="status warning">System emails are disabled until a default sender is set.</div>
+        )}
       </section>
 
       <section className="box">
