@@ -122,14 +122,22 @@ FRONTEND_NEEDS_BUILD=true
 
 if [ -f "$ROOT_DIR/backend/target/release/w9-mail-backend" ]; then
     BINARY_TIME=$(stat -c %Y "$ROOT_DIR/backend/target/release/w9-mail-backend" 2>/dev/null || echo 0)
-    NEWEST_SRC=$(find "$ROOT_DIR/backend/src" "$ROOT_DIR/backend/Cargo.toml" -type f \( -name "*.rs" -o -name "Cargo.toml" \) 2>/dev/null | xargs stat -c %Y 2>/dev/null | sort -n | tail -1 || echo 0)
-    [ "$NEWEST_SRC" -lt "$BINARY_TIME" ] && [ "$NEWEST_SRC" -gt 0 ] && BACKEND_NEEDS_BUILD=false
+    NEWEST_SRC=$(find "$ROOT_DIR/backend/src" "$ROOT_DIR/backend/Cargo.toml" -type f \( -name "*.rs" -o -name "Cargo.toml" \) 2>/dev/null | xargs -r stat -c %Y 2>/dev/null | sort -n | tail -n 1 2>/dev/null)
+    NEWEST_SRC=${NEWEST_SRC:-0}
+    BINARY_TIME=${BINARY_TIME:-0}
+    if [ "$NEWEST_SRC" -lt "$BINARY_TIME" ] && [ "$NEWEST_SRC" -gt 0 ]; then
+        BACKEND_NEEDS_BUILD=false
+    fi
 fi
 
 if [ -d "$ROOT_DIR/frontend/out" ]; then
     DIST_TIME=$(stat -c %Y "$ROOT_DIR/frontend/out" 2>/dev/null || echo 0)
-    NEWEST_FE=$(find "$ROOT_DIR/frontend/app" "$ROOT_DIR/frontend/public" "$ROOT_DIR/frontend/package.json" "$ROOT_DIR/frontend/next.config.js" -type f 2>/dev/null | xargs stat -c %Y 2>/dev/null | sort -n | tail -1 || echo 0)
-    [ "$NEWEST_FE" -lt "$DIST_TIME" ] && [ "$NEWEST_FE" -gt 0 ] && FRONTEND_NEEDS_BUILD=false
+    NEWEST_FE=$(find "$ROOT_DIR/frontend/app" "$ROOT_DIR/frontend/public" "$ROOT_DIR/frontend/package.json" "$ROOT_DIR/frontend/next.config.js" -type f 2>/dev/null | xargs -r stat -c %Y 2>/dev/null | sort -n | tail -n 1 2>/dev/null)
+    NEWEST_FE=${NEWEST_FE:-0}
+    DIST_TIME=${DIST_TIME:-0}
+    if [ "$NEWEST_FE" -lt "$DIST_TIME" ] && [ "$NEWEST_FE" -gt 0 ]; then
+        FRONTEND_NEEDS_BUILD=false
+    fi
 fi
 
 # Build backend (if needed)

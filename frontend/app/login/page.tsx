@@ -26,7 +26,7 @@ export default function LoginPage() {
       return
     }
     router.push(session.role === 'admin' ? '/manage' : '/')
-  }, [session, router])
+  }, [session, router, form.password])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

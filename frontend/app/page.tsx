@@ -204,9 +204,9 @@ export default function Home() {
               <Link className="button ghost" href="/profile">
                 Profile
               </Link>
-              <button className="button subtle" onClick={logout}>
-                Sign out ({session.email})
-              </button>
+            <button className="button subtle" onClick={logout}>
+              Sign out ({session.email})
+            </button>
             </>
           ) : (
             <Link className="button" href="/login">
@@ -266,15 +266,15 @@ export default function Home() {
                   id="from"
                   value={formData.from}
                   onChange={(e) => setFormData({ ...formData, from: e.target.value })}
-                required
+                  required
                 disabled={!senderOptions.length}
                 >
                 <option value="">Select sender</option>
                 {senderOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
-                  </option>
-                ))}
+                    </option>
+                  ))}
                 </select>
               {isLoadingSenders && <small>Loading senders…</small>}
               {!isLoadingSenders && !senderOptions.length && (

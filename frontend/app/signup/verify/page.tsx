@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
 type ViewState = 'idle' | 'loading' | 'success' | 'error'
 
-export default function SignupVerifyPage() {
+function VerifyContent() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token') || ''
   const [state, setState] = useState<ViewState>('idle')
@@ -47,46 +47,66 @@ export default function SignupVerifyPage() {
   }, [token])
 
   return (
-    <main className="app">
-      <header className="header">
-        <h1>W9 Mail / Verify signup</h1>
-        <p>Finalize your registration and start sending.</p>
-      </header>
+    <section className="box">
+      <h2 className="section-title">Status</h2>
+      <p className={`status ${state === 'error' ? 'error' : state === 'success' ? 'success' : 'warning'}`}>{message}</p>
+      <div className="actions">
+        <Link className="button" href="/login">
+          Go to login
+        </Link>
+        <Link className="button ghost" href="/signup">
+          Start over
+        </Link>
+      </div>
+    </section>
+  )
+}
 
-      <nav className="nav">
-        <Link className="nav-link" href="/">
-          Composer
-        </Link>
-        <Link className="nav-link" href="/manage">
-          Manage
-        </Link>
-        <Link className="nav-link" href="/docs">
-          Docs
-        </Link>
-        <Link className="nav-link" href="/profile">
-          Profile
-        </Link>
-        <Link className="nav-link" href="/login">
-          Login
-        </Link>
-        <Link className="nav-link active" href="/signup/verify">
-          Verify
-        </Link>
-      </nav>
+export default function SignupVerifyPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="app">
+          <header className="header">
+            <h1>W9 Mail / Verify signup</h1>
+            <p>Finalize your registration and start sending.</p>
+          </header>
+          <section className="box">
+            <p className="status warning">Loading verification details…</p>
+          </section>
+        </main>
+      }
+    >
+      <main className="app">
+        <header className="header">
+          <h1>W9 Mail / Verify signup</h1>
+          <p>Finalize your registration and start sending.</p>
+        </header>
 
-      <section className="box">
-        <h2 className="section-title">Status</h2>
-        <p className={`status ${state === 'error' ? 'error' : state === 'success' ? 'success' : 'warning'}`}>{message}</p>
-        <div className="actions">
-          <Link className="button" href="/login">
-            Go to login
+        <nav className="nav">
+          <Link className="nav-link" href="/">
+            Composer
           </Link>
-          <Link className="button ghost" href="/signup">
-            Start over
+          <Link className="nav-link" href="/manage">
+            Manage
           </Link>
-        </div>
-      </section>
-    </main>
+          <Link className="nav-link" href="/docs">
+            Docs
+          </Link>
+          <Link className="nav-link" href="/profile">
+            Profile
+          </Link>
+          <Link className="nav-link" href="/login">
+            Login
+          </Link>
+          <Link className="nav-link active" href="/signup/verify">
+            Verify
+          </Link>
+        </nav>
+
+        <VerifyContent />
+      </main>
+    </Suspense>
   )
 }
 
