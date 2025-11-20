@@ -1,9 +1,10 @@
-import type { Metadata, Viewport } from 'next'
+import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'W9 Mail - Email Service API',
   description: 'Email service API provider using Microsoft SMTP IMAP POP3',
+  themeColor: '#000000',
   manifest: '/site.webmanifest',
   icons: {
     icon: [
@@ -14,10 +15,6 @@ export const metadata: Metadata = {
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
     other: [],
   },
-}
-
-export const viewport: Viewport = {
-  themeColor: '#000000',
 }
 
 export default function RootLayout({

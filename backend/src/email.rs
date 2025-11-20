@@ -88,10 +88,10 @@ impl EmailService {
         };
 
         let email = message_builder.singlepart(
-            SinglePart::builder()
+                SinglePart::builder()
                 .header(content_type)
-                .body(body.to_string()),
-        )?;
+                    .body(body.to_string()),
+            )?;
 
         // Create SMTP transport for Microsoft/Outlook
         // Port 587 requires STARTTLS (not direct TLS)

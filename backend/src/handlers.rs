@@ -250,9 +250,9 @@ pub async fn create_alias(
         "SELECT id, email, display_name, is_active FROM accounts WHERE id = ?",
     )
     .bind(&account_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let account = match account_row {
         Some(row) => (

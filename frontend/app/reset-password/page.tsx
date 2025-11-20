@@ -1,10 +1,10 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
-function ResetContent() {
+export default function ResetPasswordPage() {
   const searchParams = useSearchParams()
   const initialToken = searchParams.get('token') || ''
   const [token, setToken] = useState(initialToken)
@@ -53,7 +53,36 @@ function ResetContent() {
   }
 
   return (
-    <>
+    <main className="app">
+      <header className="header">
+        <h1>W9 Mail / Reset password</h1>
+        <p>Use the token sent to your inbox to set a new password.</p>
+      </header>
+
+      <nav className="nav">
+        <Link className="nav-link" href="/">
+          Composer
+        </Link>
+        <Link className="nav-link" href="/manage">
+          Manage
+        </Link>
+        <Link className="nav-link" href="/docs">
+          Docs
+        </Link>
+        <Link className="nav-link" href="/profile">
+          Profile
+        </Link>
+        <Link className="nav-link" href="/login">
+          Login
+        </Link>
+        <Link className="nav-link" href="/signup">
+          Signup
+        </Link>
+        <Link className="nav-link active" href="/reset-password">
+          Reset
+        </Link>
+      </nav>
+
       {message && <div className={`status ${message.type}`}>{message.text}</div>}
 
       <section className="box">
@@ -82,58 +111,7 @@ function ResetContent() {
           Didn&apos;t request this? Ignore the email or <Link href="/profile">trigger a new one</Link>.
         </p>
       </section>
-    </>
-  )
-}
-
-export default function ResetPasswordPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="app">
-          <header className="header">
-            <h1>W9 Mail / Reset password</h1>
-            <p>Use the token sent to your inbox to set a new password.</p>
-          </header>
-          <section className="box">
-            <p className="status warning">Loading reset form…</p>
-          </section>
-        </main>
-      }
-    >
-      <main className="app">
-        <header className="header">
-          <h1>W9 Mail / Reset password</h1>
-          <p>Use the token sent to your inbox to set a new password.</p>
-        </header>
-
-        <nav className="nav">
-          <Link className="nav-link" href="/">
-            Composer
-          </Link>
-          <Link className="nav-link" href="/manage">
-            Manage
-          </Link>
-          <Link className="nav-link" href="/docs">
-            Docs
-          </Link>
-          <Link className="nav-link" href="/profile">
-            Profile
-          </Link>
-          <Link className="nav-link" href="/login">
-            Login
-          </Link>
-          <Link className="nav-link" href="/signup">
-            Signup
-          </Link>
-          <Link className="nav-link active" href="/reset-password">
-            Reset
-          </Link>
-        </nav>
-
-        <ResetContent />
-      </main>
-    </Suspense>
+    </main>
   )
 }
 
