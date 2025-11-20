@@ -252,6 +252,11 @@ if [ -d "$ROOT_DIR/frontend/public" ]; then
     $SUDO_CMD cp -r "$ROOT_DIR/frontend/public"/* $FRONTEND_PUBLIC/ 2>/dev/null || true
 fi
 
+# Also copy root-level public assets (repo keeps global icons under /public)
+if [ -d "$ROOT_DIR/public" ]; then
+    $SUDO_CMD cp -r "$ROOT_DIR/public"/* $FRONTEND_PUBLIC/ 2>/dev/null || true
+fi
+
 $SUDO_CMD chown -R root:root $FRONTEND_PUBLIC
 
 # Env file
