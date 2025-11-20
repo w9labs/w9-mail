@@ -12,6 +12,7 @@ interface EmailAccount {
 export default function ManagePage() {
   const [accounts, setAccounts] = useState<EmailAccount[]>([])
   const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [formData, setFormData] = useState({
     email: '',
     displayName: '',
@@ -40,6 +41,7 @@ export default function ManagePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setMessage(null)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
       const response = await fetch(`${apiUrl}/accounts`, {
@@ -47,12 +49,18 @@ export default function ManagePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      if (response.ok) {
+      const data = await response.json()
+      
+      if (response.ok && data.status === 'success') {
+        setMessage({ type: 'success', text: data.message || 'Account created successfully!' })
         fetchAccounts()
         setFormData({ email: '', displayName: '', password: '', isActive: true })
+      } else {
+        setMessage({ type: 'error', text: data.message || 'Failed to create account' })
       }
     } catch (error) {
       console.error('Failed to create account:', error)
+      setMessage({ type: 'error', text: 'Network error. Please try again.' })
     }
   }
 
@@ -77,6 +85,19 @@ export default function ManagePage() {
   return (
     <main style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       <h1>Manage Email Services</h1>
+      
+      {message && (
+        <div style={{
+          padding: '1rem',
+          marginTop: '1rem',
+          borderRadius: '4px',
+          backgroundColor: message.type === 'success' ? '#d4edda' : '#f8d7da',
+          color: message.type === 'success' ? '#155724' : '#721c24',
+          border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`
+        }}>
+          {message.text}
+        </div>
+      )}
       
       <section style={{ marginTop: '2rem' }}>
         <h2>Add New Email Account</h2>

@@ -31,10 +31,24 @@ pub async fn get_accounts(State(state): State<AppState>) -> Result<Json<Vec<Emai
 pub async fn create_account(
     State(state): State<AppState>,
     Json(req): Json<CreateAccountRequest>,
-) -> Result<Json<EmailAccount>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Check if email already exists
+    let existing = sqlx::query("SELECT email FROM accounts WHERE email = ?")
+        .bind(&req.email)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if existing.is_some() {
+        return Ok(Json(serde_json::json!({
+            "status": "error",
+            "message": "Email address already exists"
+        })));
+    }
+
     let id = Uuid::new_v4().to_string();
     
-    sqlx::query(
+    match sqlx::query(
         "INSERT INTO accounts (id, email, display_name, password, is_active) VALUES (?, ?, ?, ?, ?)"
     )
     .bind(&id)
@@ -43,17 +57,28 @@ pub async fn create_account(
     .bind(&req.password)
     .bind(req.is_active)
     .execute(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let account = EmailAccount {
-        id,
-        email: req.email,
-        display_name: req.display_name,
-        is_active: req.is_active,
-    };
-
-    Ok(Json(account))
+    .await {
+        Ok(_) => {
+            let account = EmailAccount {
+                id,
+                email: req.email,
+                display_name: req.display_name,
+                is_active: req.is_active,
+            };
+            Ok(Json(serde_json::json!({
+                "status": "success",
+                "message": "Account created successfully",
+                "account": account
+            })))
+        }
+        Err(e) => {
+            eprintln!("Database error: {}", e);
+            Ok(Json(serde_json::json!({
+                "status": "error",
+                "message": format!("Failed to create account: {}", e)
+            })))
+        }
+    }
 }
 
 pub async fn update_account(

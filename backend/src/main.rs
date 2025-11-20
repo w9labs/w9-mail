@@ -42,6 +42,7 @@ pub struct CreateAccountRequest {
     #[serde(rename = "displayName")]
     pub display_name: String,
     pub password: String,
+    #[serde(rename = "isActive")]
     pub is_active: bool,
 }
 
