@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import Footer from './components/Footer'
 
 export const metadata: Metadata = {
   title: 'W9 Mail - Email Service API',
@@ -27,7 +28,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <div className="page-container">
+          {children}
+          <Footer />
+        </div>
+      </body>
     </html>
   )
 }
