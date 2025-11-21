@@ -95,7 +95,7 @@ export default function ProfilePage() {
             <h2 className="section-title">Change Password</h2>
             {!changingPassword ? (
               <>
-                <p>Update your password. You'll need to provide your current password.</p>
+                <p>Update your password. You&apos;ll need to provide your current password.</p>
                 <button className="button" onClick={() => setChangingPassword(true)}>
                   Change Password
                 </button>
