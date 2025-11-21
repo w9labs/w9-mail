@@ -182,7 +182,7 @@ export default function Home() {
         <h1>W9 Mail · Open-source mail rail</h1>
         <p>{heroSubtitle}</p>
         <div className="actions">
-          <a className="button ghost" href="https://github.com/ShayNeeo/w9-mail" target="_blank" rel="noreferrer">/ShayNeeo/w9-mail</a>
+          <a className="button ghost" href="https://github.com/ShayNeeo/w9-mail" target="_blank" rel="noreferrer">/GitHub</a>
           {session ? (
             <>
               <Link className="button ghost" href="/profile">Profile</Link>
