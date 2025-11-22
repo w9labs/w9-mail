@@ -18,10 +18,10 @@ export default function Footer() {
           </ul>
         </div>
         <div>
-          <div className="footer-title">W9 Systems AB</div>
+          <div className="footer-title">W9 Labs</div>
           <p className="footer-copy">
-            Monochrome infrastructure for regulated senders. Reach us at{' '}
-            <a href="mailto:hello@w9.nu">hello@w9.nu</a>.
+            Open Source. Community Driven. Non-Profit. Reach us at{' '}
+            <a href="mailto:hi@w9.nu">hi@w9.nu</a>.
           </p>
         </div>
       </div>
