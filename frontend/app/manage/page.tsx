@@ -83,6 +83,9 @@ export default function ManagePage() {
   })
   const [editingUserPassword, setEditingUserPassword] = useState<string | null>(null)
   const [userPassword, setUserPassword] = useState('')
+  const [editingAccountOwner, setEditingAccountOwner] = useState<string | null>(null)
+  const [editingAliasOwner, setEditingAliasOwner] = useState<string | null>(null)
+  const [editingAliasCredential, setEditingAliasCredential] = useState<string | null>(null)
 
   useEffect(() => {
     if (!session?.token) {
@@ -626,6 +629,87 @@ export default function ManagePage() {
     }
   }
 
+  const handleAccountOwnerChange = async (accountId: string, newOwnerId: string | null) => {
+    if (!session?.token) return
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const response = await fetch(`${apiUrl}/accounts/${accountId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`
+        },
+        body: JSON.stringify({ ownerId: newOwnerId || null })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAccounts((prev) => prev.map((acc) => (acc.id === accountId ? data : acc)))
+        setMessage({ type: 'success', text: 'Account owner updated successfully' })
+        setEditingAccountOwner(null)
+      } else {
+        const error = await response.json().catch(() => ({ message: 'Failed to update owner' }))
+        setMessage({ type: 'error', text: error.message || 'Failed to update owner' })
+      }
+    } catch (error) {
+      console.error('Failed to update account owner:', error)
+      setMessage({ type: 'error', text: 'Network error. Please try again.' })
+    }
+  }
+
+  const handleAliasOwnerChange = async (aliasId: string, newOwnerId: string | null) => {
+    if (!session?.token) return
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const response = await fetch(`${apiUrl}/aliases/${aliasId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`
+        },
+        body: JSON.stringify({ ownerId: newOwnerId || null })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAliases((prev) => prev.map((alias) => (alias.id === aliasId ? data : alias)))
+        setMessage({ type: 'success', text: 'Alias owner updated successfully' })
+        setEditingAliasOwner(null)
+      } else {
+        const error = await response.json().catch(() => ({ message: 'Failed to update owner' }))
+        setMessage({ type: 'error', text: error.message || 'Failed to update owner' })
+      }
+    } catch (error) {
+      console.error('Failed to update alias owner:', error)
+      setMessage({ type: 'error', text: 'Network error. Please try again.' })
+    }
+  }
+
+  const handleAliasCredentialChange = async (aliasId: string, newAccountId: string) => {
+    if (!session?.token) return
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const response = await fetch(`${apiUrl}/aliases/${aliasId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.token}`
+        },
+        body: JSON.stringify({ accountId: newAccountId })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAliases((prev) => prev.map((alias) => (alias.id === aliasId ? data : alias)))
+        setMessage({ type: 'success', text: 'Alias credential updated successfully' })
+        setEditingAliasCredential(null)
+      } else {
+        const error = await response.json().catch(() => ({ message: 'Failed to update credential' }))
+        setMessage({ type: 'error', text: error.message || 'Failed to update credential' })
+      }
+    } catch (error) {
+      console.error('Failed to update alias credential:', error)
+      setMessage({ type: 'error', text: 'Network error. Please try again.' })
+    }
+  }
+
   const defaultSenderOptions = [
     ...accounts.map((account) => ({
       value: `account:${account.id}`,
@@ -878,9 +962,56 @@ export default function ManagePage() {
                     <tr key={alias.id}>
                       <td>{alias.aliasEmail}</td>
                       <td>{alias.displayName || '—'}</td>
-                      <td>{alias.accountEmail}</td>
                       <td>
-                        {alias.ownerId ? (alias.ownerId === session?.id ? 'You' : users.find(u => u.id === alias.ownerId)?.email || 'Unknown') : '—'}
+                        {editingAliasCredential === alias.id ? (
+                          <select
+                            value={alias.accountId}
+                            onChange={(e) => handleAliasCredentialChange(alias.id, e.target.value)}
+                            onBlur={() => setEditingAliasCredential(null)}
+                            autoFocus
+                            style={{ padding: '4px 8px', fontSize: '14px' }}
+                          >
+                            {accounts.map((acc) => (
+                              <option key={acc.id} value={acc.id}>
+                                {acc.displayName} ({acc.email})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            style={isAdmin ? { cursor: 'pointer', textDecoration: 'underline' } : {}}
+                            onClick={() => isAdmin && setEditingAliasCredential(alias.id)}
+                            title={isAdmin ? 'Click to change credential' : ''}
+                          >
+                            {alias.accountEmail}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {editingAliasOwner === alias.id ? (
+                          <select
+                            value={alias.ownerId || ''}
+                            onChange={(e) => handleAliasOwnerChange(alias.id, e.target.value || null)}
+                            onBlur={() => setEditingAliasOwner(null)}
+                            autoFocus
+                            style={{ padding: '4px 8px', fontSize: '14px' }}
+                          >
+                            <option value="">— No owner —</option>
+                            {users.map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {user.email}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            style={isAdmin ? { cursor: 'pointer', textDecoration: 'underline' } : {}}
+                            onClick={() => isAdmin && setEditingAliasOwner(alias.id)}
+                            title={isAdmin ? 'Click to change owner' : ''}
+                          >
+                            {alias.ownerId ? (alias.ownerId === session?.id ? 'You' : users.find(u => u.id === alias.ownerId)?.email || 'Unknown') : '—'}
+                          </span>
+                        )}
                       </td>
                       <td>
                         {alias.isActive ? 'Active' : 'Inactive'}
@@ -939,7 +1070,30 @@ export default function ManagePage() {
                     <td>{account.email}</td>
                     <td>{account.displayName}</td>
                     <td>
-                      {account.ownerId ? (account.ownerId === session?.id ? 'You' : users.find(u => u.id === account.ownerId)?.email || 'Unknown') : '—'}
+                      {editingAccountOwner === account.id ? (
+                        <select
+                          value={account.ownerId || ''}
+                          onChange={(e) => handleAccountOwnerChange(account.id, e.target.value || null)}
+                          onBlur={() => setEditingAccountOwner(null)}
+                          autoFocus
+                          style={{ padding: '4px 8px', fontSize: '14px' }}
+                        >
+                          <option value="">— No owner —</option>
+                          {users.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.email}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          style={isAdmin ? { cursor: 'pointer', textDecoration: 'underline' } : {}}
+                          onClick={() => isAdmin && setEditingAccountOwner(account.id)}
+                          title={isAdmin ? 'Click to change owner' : ''}
+                        >
+                          {account.ownerId ? (account.ownerId === session?.id ? 'You' : users.find(u => u.id === account.ownerId)?.email || 'Unknown') : '—'}
+                        </span>
+                      )}
                     </td>
                     <td>
                       {account.isActive ? 'Active' : 'Inactive'}
