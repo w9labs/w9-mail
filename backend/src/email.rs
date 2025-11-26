@@ -163,7 +163,7 @@ impl EmailService {
             // Simple singlepart email
             message_builder.singlepart(
                 SinglePart::builder()
-                    .header(content_type)
+                .header(content_type)
                     .body(final_body),
             )?
         } else {

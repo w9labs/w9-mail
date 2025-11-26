@@ -182,6 +182,7 @@ export default function Home() {
   return (
     <main className="app">
       <header className="header">
+        <p className="eyebrow">Developed by W9 Labs</p>
         <h1>W9 Mail · Open-source mail rail</h1>
         <p>{heroSubtitle}</p>
         <div className="actions">
