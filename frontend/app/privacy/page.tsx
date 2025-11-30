@@ -25,6 +25,11 @@ const sections = [
       'We only talk to services required to deliver email: Microsoft (Graph / SMTP / IMAP / POP3), Cloudflare Turnstile for bot protection, and your selected delivery targets. No ad networks, no trackers.',
   },
   {
+    title: 'Data Sharing & Disclosure',
+    body:
+      'We do not sell, rent, or share your data with advertisers, data brokers, or any third parties beyond what is strictly necessary to provide the service. Your email account data and OAuth tokens are: (1) used to authenticate with Microsoft 365 / Outlook services (Graph API, SMTP, IMAP, POP3) for sending and receiving email on your behalf, (2) processed by Cloudflare Turnstile for bot protection (only verification tokens, not personal data), and (3) transmitted to delivery targets you specify when sending emails. We do not transfer your data to any other services, partners, or entities. All data processing occurs on servers you control, and mail logs are stored locally only. We never share your data with advertisers or analytics companies.',
+  },
+  {
     title: 'Retention & Deletion',
     body:
       'You control your data. Delete an account inside /profile to revoke API tokens, remove aliases/accounts, and wipe cached events. Mail logs rotate within 30 days. Backups live inside the same region and are encrypted at rest.',
