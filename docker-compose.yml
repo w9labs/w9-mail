@@ -6,6 +6,8 @@ services:
     image: ghcr.io/${GITHUB_USER:-your-username}/w9-mail-backend:latest
     container_name: w9-mail-backend
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - "${W9_MAIL_PORT:-10106}:8080"
     environment:
@@ -38,6 +40,8 @@ services:
     image: ghcr.io/${GITHUB_USER:-your-username}/w9-mail-frontend:latest
     container_name: w9-mail-frontend
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - "${W9_MAIL_FRONTEND_PORT:-8082}:80"
     networks:
