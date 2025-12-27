@@ -3,7 +3,7 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use tower_http::cors::CorsLayer;
 
 mod email;
@@ -31,7 +31,7 @@ pub struct MicrosoftOAuthConfig {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: SqlitePool,
+    pub db: PgPool,
     pub microsoft_oauth: MicrosoftOAuthConfig,
     pub jwt_secret: String,
     pub app_base_url: String,
@@ -178,11 +178,35 @@ async fn main() -> anyhow::Result<()> {
     let port = std::env::var("PORT")
         .unwrap_or_else(|_| "8080".to_string())
         .parse::<u16>()?;
-    let db_path = std::env::var("DATABASE_PATH").unwrap_or_else(|_| "w9mail.db".to_string());
     
-    let db_url = format!("sqlite:{}", db_path);
-    let db = SqlitePool::connect(&db_url).await?;
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let db = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to connect to Postgres: {}", e))?;
     
+    // Check if table exists before trying to create users table to avoid errors or rely on IF NOT EXISTS
+    // Postgres dialect updates:
+    // - TEXT PRIMARY KEY is valid
+    // - BOOLEAN defaults TRUE/FALSE
+    // - DATETIME -> TIMESTAMPTZ
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin','dev','user')),
+            must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&db)
+    .await?;
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS accounts (
@@ -190,9 +214,9 @@ async fn main() -> anyhow::Result<()> {
             email TEXT UNIQUE NOT NULL,
             display_name TEXT NOT NULL,
             password TEXT NOT NULL,
-            is_active BOOLEAN NOT NULL DEFAULT 1,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             owner_id TEXT,
-            is_public BOOLEAN NOT NULL DEFAULT 0,
+            is_public BOOLEAN NOT NULL DEFAULT FALSE,
             FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE SET NULL
         )
         "#,
@@ -206,10 +230,10 @@ async fn main() -> anyhow::Result<()> {
             id TEXT PRIMARY KEY,
             alias_email TEXT UNIQUE NOT NULL,
             display_name TEXT,
-            is_active BOOLEAN NOT NULL DEFAULT 1,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             account_id TEXT NOT NULL,
             owner_id TEXT,
-            is_public BOOLEAN NOT NULL DEFAULT 0,
+            is_public BOOLEAN NOT NULL DEFAULT FALSE,
             FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE,
             FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE SET NULL
         )
@@ -218,43 +242,8 @@ async fn main() -> anyhow::Result<()> {
     .execute(&db)
     .await?;
 
-    // Migrate existing tables: add owner_id and is_public columns if they don't exist
-    sqlx::query(
-        r#"
-        ALTER TABLE accounts ADD COLUMN owner_id TEXT
-        "#,
-    )
-    .execute(&db)
-    .await
-    .ok();
-
-    sqlx::query(
-        r#"
-        ALTER TABLE accounts ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT 0
-        "#,
-    )
-    .execute(&db)
-    .await
-    .ok();
-
-    sqlx::query(
-        r#"
-        ALTER TABLE aliases ADD COLUMN owner_id TEXT
-        "#,
-    )
-    .execute(&db)
-    .await
-    .ok();
-
-    sqlx::query(
-        r#"
-        ALTER TABLE aliases ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT 0
-        "#,
-    )
-    .execute(&db)
-    .await
-    .ok();
-
+    // Postgres doesn't support 'singleton' constraint check in quite the same way as sqlite nicely inside create, 
+    // but we can just use a unique index or similar. For simplicity, we keep it as is, Postgres supports CHECK.
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS default_sender (
@@ -269,27 +258,12 @@ async fn main() -> anyhow::Result<()> {
 
     sqlx::query(
         r#"
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('admin','dev','user')),
-            must_change_password BOOLEAN NOT NULL DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-        "#,
-    )
-    .execute(&db)
-    .await?;
-
-    sqlx::query(
-        r#"
         CREATE TABLE IF NOT EXISTS pending_users (
             id TEXT PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             verification_token TEXT UNIQUE NOT NULL,
-            expires_at INTEGER NOT NULL
+            expires_at BIGINT NOT NULL
         )
         "#,
     )
@@ -302,7 +276,7 @@ async fn main() -> anyhow::Result<()> {
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
             token TEXT UNIQUE NOT NULL,
-            expires_at INTEGER NOT NULL,
+            expires_at BIGINT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         "#,
@@ -317,8 +291,8 @@ async fn main() -> anyhow::Result<()> {
             user_id TEXT NOT NULL,
             token_hash TEXT UNIQUE NOT NULL,
             name TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_used_at DATETIME,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            last_used_at TIMESTAMPTZ,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         "#,
@@ -410,4 +384,3 @@ async fn main() -> anyhow::Result<()> {
 async fn health_check() -> &'static str {
     "ok"
 }
-
