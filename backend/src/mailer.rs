@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use sqlx::{Row, SqlitePool};
+use sqlx::{Row, PgPool};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -49,7 +49,7 @@ pub struct SenderSummary {
 }
 
 pub async fn resolve_sender_by_email(
-    db: &SqlitePool,
+    db: &PgPool,
     email: &str,
 ) -> anyhow::Result<ResolvedSender> {
     if let Some(row) = sqlx::query(
@@ -99,7 +99,7 @@ pub async fn resolve_sender_by_email(
     ))
 }
 
-async fn summarize_account_by_id(db: &SqlitePool, account_id: &str) -> anyhow::Result<SenderSummary> {
+async fn summarize_account_by_id(db: &PgPool, account_id: &str) -> anyhow::Result<SenderSummary> {
     let row = sqlx::query(
         "SELECT id, email, display_name, password, is_active FROM accounts WHERE id = ?",
     )
@@ -132,7 +132,7 @@ async fn summarize_account_by_id(db: &SqlitePool, account_id: &str) -> anyhow::R
     })
 }
 
-async fn summarize_alias_by_id(db: &SqlitePool, alias_id: &str) -> anyhow::Result<SenderSummary> {
+async fn summarize_alias_by_id(db: &PgPool, alias_id: &str) -> anyhow::Result<SenderSummary> {
     let row = sqlx::query(
         r#"
         SELECT 
@@ -186,7 +186,7 @@ async fn summarize_alias_by_id(db: &SqlitePool, alias_id: &str) -> anyhow::Resul
 }
 
 pub async fn summarize_sender(
-    db: &SqlitePool,
+    db: &PgPool,
     sender_type: SenderKind,
     sender_id: &str,
 ) -> anyhow::Result<SenderSummary> {
@@ -197,7 +197,7 @@ pub async fn summarize_sender(
 }
 
 pub async fn get_default_sender_summary(
-    db: &SqlitePool,
+    db: &PgPool,
 ) -> anyhow::Result<Option<SenderSummary>> {
     let row = sqlx::query("SELECT sender_type, sender_id FROM default_sender WHERE singleton = 1")
         .fetch_optional(db)
@@ -214,7 +214,7 @@ pub async fn get_default_sender_summary(
 }
 
 pub async fn upsert_default_sender(
-    db: &SqlitePool,
+    db: &PgPool,
     sender_type: SenderKind,
     sender_id: &str,
 ) -> anyhow::Result<SenderSummary> {
@@ -236,7 +236,7 @@ pub async fn upsert_default_sender(
 }
 
 pub async fn delete_default_if_matches(
-    db: &SqlitePool,
+    db: &PgPool,
     sender_type: SenderKind,
     sender_id: &str,
 ) -> anyhow::Result<()> {

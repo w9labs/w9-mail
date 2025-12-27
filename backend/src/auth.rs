@@ -16,7 +16,7 @@ use rand_core::OsRng;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
-use sqlx::{Row, SqlitePool};
+use sqlx::{Row, PgPool};
 use uuid::Uuid;
 use rand::Rng;
 
@@ -282,7 +282,7 @@ where
     }
 }
 
-pub async fn ensure_default_admin(db: &SqlitePool) -> anyhow::Result<()> {
+pub async fn ensure_default_admin(db: &PgPool) -> anyhow::Result<()> {
     const ADMIN_EMAIL: &str = "shayneeo@0.id.vn";
     const ADMIN_PASSWORD: &str = "Admin@123";
 

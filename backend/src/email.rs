@@ -2,7 +2,7 @@
 // This module will handle email operations
 
 use lettre::{
-    message::{header::ContentType, Attachment, Body, Mailbox, Message, MultiPart, SinglePart},
+    message::{header::ContentType, Attachment, Mailbox, Message, MultiPart, SinglePart},
     transport::smtp::authentication::Credentials,
     AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
 };
